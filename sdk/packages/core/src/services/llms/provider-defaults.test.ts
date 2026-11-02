@@ -776,6 +776,68 @@ describe("resolveProviderConfig", () => {
 		expect(resolved?.knownModels?.["gpt-5.4"]).toBeUndefined();
 	});
 
+	it("does not use LiteLLM's legacy max_tokens output limit as the input budget", async () => {
+		// LiteLLM sets the legacy `max_tokens` to `max_output_tokens` when known.
+		const fetchMock = vi.fn(async () =>
+			Response.json({
+				data: [
+					{
+						model_name: "custom-model",
+						model_info: { max_output_tokens: 8_192, max_tokens: 8_192 },
+					},
+				],
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const resolved = await resolveProviderConfig(
+			"litellm",
+			{ failOnError: true, cacheTtlMs: 0 },
+			{
+				providerId: "litellm",
+				modelId: "",
+				apiKey: "litellm-key",
+				baseUrl: "http://localhost:4000",
+			},
+		);
+
+		const model = resolved?.knownModels?.["custom-model"];
+		expect(model?.maxTokens).toBe(8_192);
+		expect(model?.maxInputTokens).toBeUndefined();
+	});
+
+	it("still uses LiteLLM's max_tokens as the input budget when no output limit is reported", async () => {
+		// Without `max_output_tokens`, LiteLLM fills `max_tokens` from the input limit.
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				Response.json({
+					data: [
+						{
+							model_name: "input-only-model",
+							model_info: { max_tokens: 131_072 },
+						},
+					],
+				}),
+			),
+		);
+
+		const resolved = await resolveProviderConfig(
+			"litellm",
+			{ failOnError: true, cacheTtlMs: 0 },
+			{
+				providerId: "litellm",
+				modelId: "",
+				apiKey: "litellm-key",
+				baseUrl: "http://localhost:4000",
+			},
+		);
+
+		expect(resolved?.knownModels?.["input-only-model"]?.maxInputTokens).toBe(
+			131_072,
+		);
+	});
+
 	it("returns an empty authoritative LiteLLM model list without auth", async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);

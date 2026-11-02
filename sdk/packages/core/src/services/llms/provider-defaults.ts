@@ -613,7 +613,13 @@ async function fetchLiteLlmPrivateModels(
 						const converted = buildModelFromPrivateSource(modelId, {
 							name: displayName ?? modelId,
 							maxTokens: info?.max_output_tokens ?? info?.max_tokens,
-							maxInputTokens: info?.max_input_tokens ?? info?.max_tokens,
+							// LiteLLM's legacy `max_tokens` holds the output limit when
+							// `max_output_tokens` is known, so only then is it unusable here.
+							maxInputTokens:
+								info?.max_input_tokens ??
+								(info?.max_output_tokens === undefined
+									? info?.max_tokens
+									: undefined),
 							supportsImages: info?.supports_vision,
 							supportsPromptCache: info?.supports_prompt_caching,
 							supportsReasoning: info?.supports_reasoning,
